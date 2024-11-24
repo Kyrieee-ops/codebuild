@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template to build and push Docker images to ECR from GitHub.
+
+Parameters:
+  GitHubConnectionArn:
+    Description: The ARN of the GitHub connection for CodePipeline.
+    Type: String
+  FullRepositoryId:
+    Description: The full repository ID to use with your CodeConnections connection.
+    Type: String
+    Default: "Kyrieee-ops/codebuild"
+  BranchName:
+    Description: The branch name to use with your GitHub repository.
+    Type: String
+    Default: master
+  CodePipelineName:
+    Description: The CodePipeline pipeline name that will deploy to your CloudFormation stack.
+    Type: String
+    Default: codebuild-codepipeline
+  ECRRepositoryName:
+    Description: The name of the ECR repository to push the Docker image.
+    Type: String
+    Default: amazonlinux-repository
+
+Resources:
+  # ECRリポジトリの作成
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRRepositoryName
+
+  # CodeBuild用のIAMロール
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeBuildRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProject}:*"
+              - Effect: Allow
+                Action:
+                - ecr:PutImage
+                - ecr:InitiateLayerUpload
+                - ecr:UploadLayerPart
+                - ecr:CompleteLayerUpload
+                - ecr:BatchCheckLayerAvailability
+                - ecr:DescribeRepositories
+                - ecr:GetAuthorizationToken
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ECRRepositoryName}"
+
+  # CodeBuildプロジェクトの作成
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: GitHubToECRBuild
+      Source:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true # Dockerビルドのために必要
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      SourceVersion: !Ref BranchName
+      EnvironmentVariables:
+        - Name: REPOSITORY_URI
+          Value: !Sub "${ECRRepository.Arn}"
+
+  # CodePipelineの作成
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: GitHubToECRPipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !ImportValue YourS3BucketForArtifacts # 事前に作成したS3バケットのインポート
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: GitHubSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                ConnectionArn: !Ref GitHubConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId
+                BranchName: !Ref BranchName
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: Build
+          Actions:
+            - Name: CodeBuild
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              InputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              OutputArtifacts:
+                - Name: BuildOutput
+
+  # CodePipeline用のIAMロール
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodePipelineRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+
+Outputs:
+  ECRRepositoryUri:
+    Description: "URI of the ECR repository"
+    Value: !GetAtt ECRRepository.RepositoryUri
