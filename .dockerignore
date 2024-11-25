@@ -1,0 +1,22 @@
+# CloudFormationテンプレートやbuildspec.ymlを除外
+codebuild.yml
+ecr.yml
+
+# Dockerfileは除外しないため、記述しない
+
+# Gitリポジトリ関連のファイルを除外
+.git
+.gitignore
+
+# IDEやエディタ関連の一時ファイルを除外
+*.swp
+*.swo
+*.log
+
+# バックアップファイルを除外
+*.bak
+*.tmp
+*~
+
+# その他不要なファイル
+.DS_Store

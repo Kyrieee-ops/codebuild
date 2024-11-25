@@ -69,9 +69,27 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: GitHubToECRBuild
+      Name: github-to-ecr-build
       Source:
         Type: CODEPIPELINE
+        BuildSpec: !Sub |
+          version: 0.2
+          phases:
+          env:
+            variables:
+              IMAGE_REPO_NAME: python-unittest
+              IMAGE_TAG: dev
+            pre_build:
+              commands:
+               - echo Logging in to Amazon ECR...
+               - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com 
+          build:
+            commands:
+              - echo Build started on `date`
+              - echo Building the Docker image...          
+              - docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+              - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+
       Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:5.0
