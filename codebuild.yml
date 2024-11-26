@@ -112,11 +112,11 @@ Resources:
   CodePipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: GitHubToECRPipeline
+      Name: !Ref CodePipelineName
       RoleArn: !GetAtt CodePipelineRole.Arn
       ArtifactStore:
-        Type: S3
-        Location: !ImportValue YourS3BucketForArtifacts # 事前に作成したS3バケットのインポート
+        Type: S3 # アーティファクトの保存場所をS3に指定
+        Location: !ImportValue s3bucketbackup # 事前に作成したS3バケットのインポート
       Stages:
         - Name: Source
           Actions:
@@ -132,6 +132,8 @@ Resources:
                 BranchName: !Ref BranchName
               OutputArtifacts:
                 - Name: SourceOutput
+              RoleArn: !GetAtt CodePipelineRole.Arn   
+              RunOrder: 1 # 実行順序
         - Name: Build
           Actions:
             - Name: CodeBuild
@@ -144,8 +146,8 @@ Resources:
                 - Name: SourceOutput
               Configuration:
                 ProjectName: !Ref CodeBuildProject
-              OutputArtifacts:
-                - Name: BuildOutput
+              # OutputArtifacts:
+              #   - Name: BuildOutput
 
   # CodePipeline用のIAMロール
   CodePipelineRole:
