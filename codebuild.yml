@@ -13,6 +13,10 @@ Parameters:
     Description: The branch name to use with your GitHub repository.
     Type: String
     Default: master
+  CodeBuildProjectName:
+    Description: The CodeBuild name
+    Type: String
+    Default: github-to-ecr-build
   CodePipelineName:
     Description: The CodePipeline pipeline name that will deploy to your CloudFormation stack.
     Type: String
@@ -27,7 +31,10 @@ Resources:
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: !Ref ECRRepositoryName
+      RepositoryName: !Sub ${ECRRepositoryName}
+      Tags: 
+        - Key: Name
+          Value: !Sub ${ECRRepositoryName}
 
   # CodeBuild用のIAMロール
   CodeBuildRole:
@@ -39,13 +46,26 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: codebuild.amazonaws.com
-            Action: sts:AssumeRole
+              Service: 
+                - codebuild.amazonaws.com
+            Action: 
+              - sts:AssumeRole
       Policies:
         - PolicyName: CodeBuildPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource: !Join
+                  - /
+                  - - !ImportValue s3bucketbackupArn
+                    - '*'
               - Effect: Allow
                 Action:
                 - logs:CreateLogGroup
@@ -69,15 +89,15 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: github-to-ecr-build
+      Name: !Sub ${CodeBuildProjectName}
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
+        BuildSpec: !Sub |
           version: 0.2
           phases:
           env:
             variables:
-              IMAGE_REPO_NAME: python-unittest
+              IMAGE_REPO_NAME: ${ECRRepositoryName}
               IMAGE_TAG: dev
             pre_build:
               commands:
@@ -159,8 +179,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: codepipeline.amazonaws.com
-            Action: sts:AssumeRole
+              Service: 
+                - codepipeline.amazonaws.com
+            Action: 
+              - sts:AssumeRole
       Policies:
         - PolicyName: CodePipelinePolicy
           PolicyDocument:
