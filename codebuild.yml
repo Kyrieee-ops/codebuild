@@ -72,7 +72,7 @@ Resources:
                 - logs:CreateLogStream
                 - logs:PutLogEvents
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${CodeBuildProject}:*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild-*"
               - Effect: Allow
                 Action:
                 - ecr:PutImage
@@ -83,7 +83,7 @@ Resources:
                 - ecr:DescribeRepositories
                 - ecr:GetAuthorizationToken
                 Resource: 
-                  - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ECRRepositoryName}"
+                  - "*"
 
   # CodeBuildプロジェクトの作成
   CodeBuildProject:
@@ -168,7 +168,6 @@ Resources:
                 ProjectName: !Ref CodeBuildProject
               # OutputArtifacts:
               #   - Name: BuildOutput
-
   # CodePipeline用のIAMロール
   CodePipelineRole:
     Type: AWS::IAM::Role
@@ -194,6 +193,55 @@ Resources:
                   - codebuild:BatchGetBuilds
                   - ecr:GetAuthorizationToken
                 Resource: "*"
+# ------------------------------------------------------------#
+# CodePipelineのソースアクションに必要なロールを定義
+# GitHubからコードを取得するアクション
+#------------------------------------------------------------#
+  CodePipelineSourceActionRole: 
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: codepipeline-source-from-github-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root # 使用しているAWSアカウントに対して権限を引き受けることができる
+        Version: '2012-10-17'      
+        Policies:
+        - PolicyName: CodePipelineSourceActionRoleDefaultPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: !Ref GitHubConnectionArn
+              - Effect: Allow
+                Action:
+                - s3:Abort*
+                - s3:DeleteObject*
+                - s3:PutObject
+                - s3:PutObjectLegalHold
+                - s3:PutObjectRetention
+                - s3:PutObjectTagging
+                - s3:PutObjectVersionTagging # アップロードしたファイルにタグを付与する場合に必要
+              - Effect: Allow
+                Resource:
+                - !ImportValue s3bucketbackupArn
+                - !Join
+                  - '/'
+                  - - !ImportValue s3bucketbackupArn
+                    - '*'
+              - Action:
+                - s3:PutObjectAcl
+                - s3:PutObjectVersionAcl
+                Effect: Allow
+                Resource: !Join
+                  - /
+                  - - !ImportValue s3bucketbackupArn
+                    - '*'
+          Version: '2012-10-17'
 
 Outputs:
   ECRRepositoryUri:
