@@ -2,6 +2,18 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: CloudFormation template to build and push Docker images to ECR from GitHub.
 
 Parameters:
+  ECRRepositoryName:
+    Description: The name of the ECR repository to push the Docker image.
+    Type: String
+    Default: amazonlinux-repository
+  CodeBuildRoleName:
+    Description: The CodeBuild role name
+    Type: String
+    Default: codebuild-role-for-ecr
+  CodeBuildProjectName:
+    Description: The CodeBuild name
+    Type: String
+    Default: github-to-ecr-build   
   GitHubConnectionArn:
     Description: The ARN of the GitHub connection for CodePipeline.
     Type: String
@@ -13,18 +25,18 @@ Parameters:
     Description: The branch name to use with your GitHub repository.
     Type: String
     Default: master
-  CodeBuildProjectName:
-    Description: The CodeBuild name
-    Type: String
-    Default: github-to-ecr-build
   CodePipelineName:
-    Description: The CodePipeline pipeline name that will deploy to your CloudFormation stack.
+    Description: The CodePipeline name that will deploy to your CloudFormation stack.
     Type: String
     Default: codebuild-codepipeline
-  ECRRepositoryName:
-    Description: The name of the ECR repository to push the Docker image.
+  CodePipelineSourceActionRoleName:
+    Description: The CodePipeline role name for ecr
     Type: String
-    Default: amazonlinux-repository
+    Default: codepipeline-source-from-github-role-for-ecr
+  CodePipelineRoleName: 
+    Description: The CodePipeline role name for codebuild
+    Type: String
+    Default: codepipeline-role-for-codebuild
 
 Resources:
   # ECRリポジトリの作成
@@ -36,11 +48,13 @@ Resources:
         - Key: Name
           Value: !Sub ${ECRRepositoryName}
 
-  # CodeBuild用のIAMロール
+# ------------------------------------------------------------#
+# CodeBuildがECRにDockerImageをPushするために必要なロール
+# ------------------------------------------------------------#
   CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CodeBuildRole
+      RoleName: !Sub ${CodeBuildRoleName}
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -132,7 +146,7 @@ Resources:
   CodePipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: !Ref CodePipelineName
+      Name: !Sub ${CodePipelineName}
       RoleArn: !GetAtt CodePipelineRole.Arn
       ArtifactStore:
         Type: S3 # アーティファクトの保存場所をS3に指定
@@ -147,9 +161,9 @@ Resources:
                 Provider: CodeStarSourceConnection
                 Version: '1'
               Configuration:
-                ConnectionArn: !Ref GitHubConnectionArn
-                FullRepositoryId: !Ref FullRepositoryId
-                BranchName: !Ref BranchName
+                ConnectionArn: !Sub ${GitHubConnectionArn}
+                FullRepositoryId: !Sub ${FullRepositoryId}
+                BranchName: !Sub ${BranchName}
               OutputArtifacts:
                 - Name: SourceOutput
               RoleArn: !GetAtt CodePipelineRole.Arn   
@@ -165,14 +179,18 @@ Resources:
               InputArtifacts:
                 - Name: SourceOutput
               Configuration:
-                ProjectName: !Ref CodeBuildProject
+                ProjectName: !Sub ${CodeBuildProject}
               # OutputArtifacts:
               #   - Name: BuildOutput
-  # CodePipeline用のIAMロール
+# ------------------------------------------------------------#
+# CodePipelineRole
+# CodeBuildを実行する用途
+# ECRに保存されたイメージを使用する
+# ------------------------------------------------------------#
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CodePipelineRole
+      RoleName: !Sub ${CodePipelineRoleName}
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -196,11 +214,12 @@ Resources:
 # ------------------------------------------------------------#
 # CodePipelineのソースアクションに必要なロールを定義
 # GitHubからコードを取得するアクション
+# ECRにイメージをPushする用途
 #------------------------------------------------------------#
   CodePipelineSourceActionRole: 
     Type: AWS::IAM::Role
     Properties:
-      RoleName: codepipeline-source-from-github-role
+      RoleName: !Sub ${CodePipelineSourceActionRoleName}
       AssumeRolePolicyDocument:
         Statement:
           - Action: sts:AssumeRole
@@ -216,7 +235,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
-                Resource: !Ref GitHubConnectionArn
+                Resource: !Sub ${GitHubConnectionArn}
               - Effect: Allow
                 Action:
                 - s3:Abort*
