@@ -9,7 +9,7 @@ RUN dnf install -y python3 python3-pip && \
 WORKDIR /app
 
 # アプリケーションコードとテストコードをコピー
-COPY . /app
+COPY app/ /app
 
 # テスト用のPythonライブラリをインストール
 RUN pip3 install --no-cache-dir pytest \
