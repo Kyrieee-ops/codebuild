@@ -101,6 +101,7 @@ Resources:
                   - "*"
 
   # CodeBuildプロジェクトの作成
+  # envはphasesの外で書かないとエラーになる
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -109,14 +110,16 @@ Resources:
         Type: CODEPIPELINE
         BuildSpec: !Sub |
           version: 0.2
+          env:
+            variables:
+              IMAGE_REPO_NAME: ${ECRRepositoryName}
+              IMAGE_TAG: dev
+              AWS_ACCOUNT_ID: ${AWS::AccountId}
+              AWS_DEFAULT_REGION: ${AWS::Region}              
           phases:
-            env:
-              variables:
-                IMAGE_REPO_NAME: ${ECRRepositoryName}
-                IMAGE_TAG: dev
             pre_build:
               commands:
-                - echo Logging in to Amazon ECR...
+                - echo Logging in to $AWS_DEFAULT_REGION/$AWS_ACCOUNT_ID Amazon ECR...
                 - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com 
             build:
               commands:
