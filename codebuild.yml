@@ -99,9 +99,12 @@ Resources:
                   - ecr:GetAuthorizationToken
                 Resource: 
                   - "*"
-
-  # CodeBuildプロジェクトの作成
-  # envはphasesの外で書かないとエラーになる
+# ------------------------------------------------------------#
+# CodeBuild
+# buildspecを実行するプロジェクトを定義する
+# GitHubに保存されているソースコードのビルドを行いArtifact
+# envはphasesの外で書かないとエラーになる
+# ------------------------------------------------------------#
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -131,7 +134,7 @@ Resources:
               commands:
                 - echo Build completed on `date`
                 - echo Pushing the Docker image to ECR...
-                - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/ $IMAGE_REPO_NAME:$IMAGE_TAG
+                - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
       Environment:
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/standard:5.0
@@ -140,13 +143,9 @@ Resources:
       ServiceRole: !Ref CodeBuildRole
       Artifacts:
         Type: CODEPIPELINE
-    # DependsOn: CodeBuildRole # CodeBuildRoleが先に作成されることを保証
-      # SourceVersion: !Ref BranchName
-      # EnvironmentVariables:
-      #   - Name: REPOSITORY_URI
-      #     Value: !Sub "${ECRRepository.Arn}"
-
-  # CodePipelineの作成
+# ------------------------------------------------------------#
+# CodePipeline
+# ------------------------------------------------------------#
   CodePipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
